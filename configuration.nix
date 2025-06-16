@@ -1,41 +1,29 @@
-# Edit this configuration file to define what should be installed on
-# your system. Help is available in the configuration.nix(5) man page
-# and in the NixOS manual (accessible by running ‘nixos-help’).
-
-{ config, pkgs, ... }:
+{ config, pkgs, lib, ... }:
 
 {
-  imports =
-    [ # Include the results of the hardware scan.
-      ./hardware-configuration.nix
-    ];
+  imports = [ ./hardware-configuration.nix ];
 
-
-
- hardware.opengl.enable = true;
-
-
-
-
-
-  # Bootloader.
-  # boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
   boot.loader.grub.enable = true;
   boot.loader.grub.devices = [ "nodev" ];
   boot.loader.grub.efiSupport = true;
   boot.loader.grub.useOSProber = true;
 
-  # Hostname
-  networking.hostName = "nixos";
+  boot.kernelPatches = [
+    {
+      name = "DMIC";
+      patch = /etc/nixos/patches/DMI.patch;
+    }
+  ];
 
-  # Enable networking
+  # 🧠 Load mic driver and firmware
+  boot.kernelModules = [ "snd_pci_acp6x" ];
+  hardware.firmware = [ pkgs.firmwareLinuxNonfree ];
+
+  networking.hostName = "nixos";
   networking.networkmanager.enable = true;
 
-  # Time zone
   time.timeZone = "Asia/Kolkata";
-
-  # Locale settings
   i18n.defaultLocale = "en_IN";
   i18n.extraLocaleSettings = {
     LC_ADDRESS = "en_IN";
@@ -49,65 +37,95 @@
     LC_TIME = "en_IN";
   };
 
-  # Enable X11 and GNOME
   services.xserver.enable = true;
   services.xserver.displayManager.gdm.enable = true;
   services.xserver.desktopManager.gnome.enable = true;
 
-  # Use proprietary NVIDIA driver
-  services.xserver.videoDrivers = [ "nvidia" ];
-  hardware.nvidia = {
-    modesetting.enable = true;
-    powerManagement.enable = true;
-    open = false; # false = proprietary driver
-    nvidiaSettings = true; # enables nvidia-settings GUI
-  };
-
-  # Keyboard layout
   services.xserver.xkb = {
     layout = "us";
     variant = "";
   };
 
-  # Printing
+  services.xserver.videoDrivers = [ "nvidia" ];
+  hardware.nvidia = {
+    modesetting.enable = true;
+    powerManagement.enable = true;
+    open = false;
+    nvidiaSettings = true;
+    prime = {
+      offload = {
+        enable = true;
+        enableOffloadCmd = true;
+      };
+      amdgpuBusId = "PCI:6:0:0";
+      nvidiaBusId = "PCI:1:0:0";
+    };
+  };
+
+  hardware.amdgpu.amdvlk.enable = true;
+
   services.printing.enable = true;
 
-  # Sound with PipeWire
+  # 🎧 Audio configuration with modern UCM override
+  hardware.alsa.enable = true;
   services.pulseaudio.enable = false;
   security.rtkit.enable = true;
+
   services.pipewire = {
-    enable = true;
+    enable = lib.mkForce true;
     alsa.enable = true;
     alsa.support32Bit = true;
     pulse.enable = true;
-    # jack.enable = true; # Uncomment if needed
-    # media-session.enable = true;
+    jack.enable = true;
+
+    # ✅ correct UCM override method
+    extraConfig.pipewire."context.properties" = {
+      "alsa.use-ucm" = false;
+    };
   };
 
-  # User account
   users.users.yogs = {
     isNormalUser = true;
     description = "Yogs";
-    extraGroups = [ "networkmanager" "wheel" ];
+    extraGroups = [ "networkmanager" "wheel" "audio" ];
     packages = with pkgs; [
       firefox
+      obs-studio
       neovim
       steam
+      spotify
+      gcc
+      vscode
+      android-tools
+      python310Full
+      git
+      gh
+      discord
+      go
+      flex
+      bison
+      ncurses
+      gnumake42
+      bc
     ];
   };
 
-  # Firefox in system profile
-  programs.firefox.enable = true;
+  programs.appimage.enable = true;
+  programs.appimage.binfmt = true;
 
-  # Allow unfree packages (required for NVIDIA)
+  programs.firefox.enable = true;
+  programs.steam.enable = true;
+  programs.steam.gamescopeSession.enable = true;
+  programs.gamemode.enable = true;
+
   nixpkgs.config.allowUnfree = true;
 
-  # Extra packages installed system-wide
   environment.systemPackages = with pkgs; [
-    # Add more packages if needed
+    pciutils
+    usbutils
+    inxi
   ];
 
-  # System version (do not change unless you know why)
   system.stateVersion = "25.05";
 }
 
